@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Girassol Commerce API</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css" />
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #f5f7fa;
+      }
+      body {
+        padding: 12px;
+      }
+      .token-box {
+        background: white;
+        border: 1px solid #dfe6ee;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      }
+      .token-box input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #dfe6ee;
+        border-radius: 6px;
+      }
+      .token-box button {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 6px;
+        background: #1f8a70;
+        color: white;
+        cursor: pointer;
+      }
+      #swagger-ui {
+        min-height: calc(100vh - 120px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="token-box">
+      <input id="jwtToken" type="text" placeholder="Cole o JWT aqui (Bearer token)" />
+      <button id="applyTokenBtn" type="button">Aplicar token</button>
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>
+    <script>
+      const tokenInput = document.getElementById('jwtToken');
+      const savedToken = localStorage.getItem('girassol-swagger-token') || '';
+      if (savedToken) {
+        tokenInput.value = savedToken;
+      }
+
+      function setSwaggerAuthToken(token) {
+        if (!token) {
+          localStorage.removeItem('girassol-swagger-token');
+          return;
+        }
+
+        localStorage.setItem('girassol-swagger-token', token);
+      }
+
+      document.getElementById('applyTokenBtn').addEventListener('click', function () {
+        const token = tokenInput.value.trim();
+        setSwaggerAuthToken(token);
+        if (token) {
+          alert('Token aplicado ao Swagger. Agora as requisições protegidas serão enviadas com o cabeçalho Authorization.');
+        }
+      });
+
+      window.onload = function () {
+        SwaggerUIBundle({
+          url: '/openapi/v1.json',
+          dom_id: '#swagger-ui',
+          deepLinking: true,
+          presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+          layout: 'BaseLayout',
+          docExpansion: 'list',
+          persistAuthorization: true,
+          requestInterceptor: function (request) {
+            const token = localStorage.getItem('girassol-swagger-token') || '';
+            if (token) {
+              request.headers.Authorization = token.startsWith('Bearer ') ? token : 'Bearer ' + token;
+            }
+            return request;
+          }
+        });
+      };
+    </script>
+  </body>
+</html>
