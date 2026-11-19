@@ -11,27 +11,26 @@ Este projeto é uma aplicação de e-commerce em C# com ASP.NET Core, MongoDB e 
 ## Pré-requisitos
 
 - .NET SDK 10.0.401 ou superior
-- MongoDB em execução localmente ou via Docker
 - Git
 
 ## Executando localmente
 
 1. Clone o projeto e entre na pasta raiz.
-2. Inicie o MongoDB com Docker:
+2. Execute os comandos abaixo. O Docker não é necessário: por padrão, a API tenta conectar ao MongoDB local e, se ele estiver indisponível, inicia com dados de demonstração em memória.
+   ```bash
+   dotnet restore
+   dotnet build
+   dotnet run --project .\src\GirassolCommerce.Api\GirassolCommerce.Api.csproj
+   ```
+3. Abra a aplicação no endereço informado no terminal (por exemplo, http://localhost:5197).
+
+Para usar o MongoDB, inicie o Docker Desktop e execute:
    ```bash
    docker compose up -d
    ```
-3. Configure as variáveis de ambiente:
-   ```bash
-   set MONGODB_URI=mongodb://localhost:27017
-   set JWT_SECRET_KEY=sua-chave-secreta-aqui
-   ```
-   No PowerShell, use `$env:MONGODB_URI = "mongodb://localhost:27017"` e `$env:JWT_SECRET_KEY = "sua-chave-secreta-aqui"`.
-4. Execute a API:
-   ```bash
-   dotnet run --project src\GirassolCommerce.Api\GirassolCommerce.Api.csproj
-   ```
-5. Abra a aplicação em http://localhost:5000 ou em https://localhost:5001 (a porta pode variar conforme a configuração do ASP.NET Core).
+   Ao iniciar a API, ela detecta o banco disponível e passa a usar a persistência MongoDB.
+
+No modo em memória, os dados são reiniciados quando a API é encerrada. O usuário administrador e os produtos de exemplo são recriados a cada inicialização.
 
 ## Acesso ao Swagger
 
@@ -48,6 +47,9 @@ A interface documenta os endpoints, parâmetros e exemplos de resposta.
 | --- | --- | --- |
 | `MONGODB_URI` | String de conexão do MongoDB | `mongodb://localhost:27017` |
 | `JWT_SECRET_KEY` | Chave para assinar JWT | `minha-chave-muito-secreta` |
+| `Storage__Mode` | `Auto` (padrão), `MongoDB` ou `InMemory` | `InMemory` |
+
+`Auto` usa MongoDB quando está acessível e troca para armazenamento em memória quando não está. Use `Storage__Mode=MongoDB` para exigir o banco ou `Storage__Mode=InMemory` para forçar o modo mock.
 
 ## Usuários padrão
 

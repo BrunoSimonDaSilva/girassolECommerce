@@ -5,7 +5,6 @@ using GirassolCommerce.Api.Data;
 using GirassolCommerce.Api.Dtos;
 using GirassolCommerce.Api.Models;
 using Microsoft.IdentityModel.Tokens;
-using MongoDB.Driver;
 
 namespace GirassolCommerce.Api.Services;
 
@@ -17,12 +16,12 @@ public interface IAuthService
 
 public class AuthService : IAuthService
 {
-    private readonly MongoDbContext _context;
+    private readonly ICommerceStore _store;
     private readonly JwtSettings _jwtSettings;
 
-    public AuthService(MongoDbContext context, JwtSettings jwtSettings)
+    public AuthService(ICommerceStore store, JwtSettings jwtSettings)
     {
-        _context = context;
+        _store = store;
         _jwtSettings = jwtSettings;
     }
 
@@ -44,7 +43,7 @@ public class AuthService : IAuthService
         }
 
         var emailNormalizado = request.Email.Trim();
-        var jaExiste = await _context.Usuarios.Find(u => u.Email == emailNormalizado).AnyAsync();
+        var jaExiste = await _store.BuscarUsuarioPorEmailAsync(emailNormalizado) is not null;
         if (jaExiste)
         {
             throw new InvalidOperationException("Usuário já cadastrado.");
@@ -65,13 +64,13 @@ public class AuthService : IAuthService
             CriadoEm = DateTime.UtcNow
         };
 
-        await _context.Usuarios.InsertOneAsync(usuario);
+        await _store.InserirUsuarioAsync(usuario);
         return usuario;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        var usuario = await _context.Usuarios.Find(u => u.Email == request.Email.Trim()).FirstOrDefaultAsync();
+        var usuario = await _store.BuscarUsuarioPorEmailAsync(request.Email.Trim());
         if (usuario is null)
         {
             throw new InvalidOperationException("Credenciais inválidas.");

@@ -1,7 +1,6 @@
 using GirassolCommerce.Api.Data;
 using GirassolCommerce.Api.Dtos;
 using GirassolCommerce.Api.Models;
-using MongoDB.Driver;
 
 namespace GirassolCommerce.Api.Services;
 
@@ -25,27 +24,25 @@ public class PedidoService : IPedidoService
         "Cancelado"
     };
 
-    private readonly MongoDbContext _context;
+    private readonly ICommerceStore _store;
 
-    public PedidoService(MongoDbContext context)
+    public PedidoService(ICommerceStore store)
     {
-        _context = context;
+        _store = store;
     }
 
     public async Task<List<Pedido>> ListarAsync(string usuarioId, bool isAdmin)
     {
-        var filter = isAdmin
-            ? Builders<Pedido>.Filter.Empty
-            : Builders<Pedido>.Filter.Eq(p => p.UsuarioId, usuarioId);
-
-        return await _context.Pedidos.Find(filter)
-            .SortByDescending(p => p.DataPedido)
-            .ToListAsync();
+        var pedidos = await _store.ListarPedidosAsync();
+        return pedidos
+            .Where(p => isAdmin || p.UsuarioId == usuarioId)
+            .OrderByDescending(p => p.DataPedido)
+            .ToList();
     }
 
     public async Task<Pedido?> BuscarPorIdAsync(string id, string usuarioId, bool isAdmin)
     {
-        var pedido = await _context.Pedidos.Find(p => p.Id == id).FirstOrDefaultAsync();
+        var pedido = await _store.BuscarPedidoAsync(id);
         if (pedido is null)
         {
             return null;
@@ -61,7 +58,7 @@ public class PedidoService : IPedidoService
 
     public async Task<Pedido> CriarAsync(string usuarioId, CreatePedidoRequest request, PedidoBusinessService businessService)
     {
-        var produtos = await _context.Produtos.Find(_ => true).ToListAsync();
+        var produtos = await _store.ListarProdutosAsync();
         var pedido = businessService.CriarPedido(usuarioId, request, produtos);
 
         foreach (var item in pedido.Itens)
@@ -69,16 +66,16 @@ public class PedidoService : IPedidoService
             var produto = produtos.First(p => p.Id == item.ProdutoId);
             produto.Estoque -= item.Quantidade;
             produto.AtualizadoEm = DateTime.UtcNow;
-            await _context.Produtos.ReplaceOneAsync(p => p.Id == produto.Id, produto);
+            await _store.AtualizarProdutoAsync(produto);
         }
 
-        await _context.Pedidos.InsertOneAsync(pedido);
+        await _store.InserirPedidoAsync(pedido);
         return pedido;
     }
 
     public async Task<Pedido> AtualizarAsync(string id, string status, string usuarioId, bool isAdmin)
     {
-        var pedido = await _context.Pedidos.Find(p => p.Id == id).FirstOrDefaultAsync()
+        var pedido = await _store.BuscarPedidoAsync(id)
             ?? throw new KeyNotFoundException("Pedido não encontrado.");
 
         if (!isAdmin && pedido.UsuarioId != usuarioId)
@@ -92,13 +89,13 @@ public class PedidoService : IPedidoService
         }
 
         pedido.Status = status;
-        await _context.Pedidos.ReplaceOneAsync(p => p.Id == id, pedido);
+        await _store.AtualizarPedidoAsync(pedido);
         return pedido;
     }
 
     public async Task DeletarAsync(string id, string usuarioId, bool isAdmin)
     {
-        var pedido = await _context.Pedidos.Find(p => p.Id == id).FirstOrDefaultAsync()
+        var pedido = await _store.BuscarPedidoAsync(id)
             ?? throw new KeyNotFoundException("Pedido não encontrado.");
 
         if (!isAdmin && pedido.UsuarioId != usuarioId)
@@ -106,8 +103,7 @@ public class PedidoService : IPedidoService
             throw new UnauthorizedAccessException("Você não pode excluir este pedido.");
         }
 
-        var result = await _context.Pedidos.DeleteOneAsync(p => p.Id == id);
-        if (result.DeletedCount == 0)
+        if (!await _store.DeletarPedidoAsync(id))
         {
             throw new KeyNotFoundException("Pedido não encontrado.");
         }

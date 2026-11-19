@@ -12,6 +12,11 @@ builder.Configuration.AddEnvironmentVariables();
 
 var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>() ?? new MongoDbSettings();
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
+var storageMode = builder.Configuration["Storage:Mode"] ?? "Auto";
+if (storageMode is not ("Auto" or "MongoDB" or "InMemory"))
+{
+    throw new InvalidOperationException("Storage:Mode deve ser Auto, MongoDB ou InMemory.");
+}
 
 var mongoConnection = Environment.GetEnvironmentVariable("MONGODB_URI") ?? mongoSettings.ConnectionString;
 if (string.IsNullOrWhiteSpace(mongoConnection))
@@ -43,14 +48,33 @@ builder.Services.Configure<JwtSettings>(options =>
     options.ExpirationMinutes = jwtSettings.ExpirationMinutes;
 });
 
-builder.Services.AddSingleton(new MongoClient(mongoConnection));
-builder.Services.AddSingleton(sp =>
+if (storageMode == "InMemory")
 {
-    var client = sp.GetRequiredService<MongoClient>();
-    return client.GetDatabase(mongoSettings.DatabaseName);
-});
+    builder.Services.AddSingleton<ICommerceStore, InMemoryCommerceStore>();
+}
+else
+{
+    var clientSettings = MongoClientSettings.FromConnectionString(mongoConnection);
+    clientSettings.ServerSelectionTimeout = TimeSpan.FromSeconds(2);
+    clientSettings.ConnectTimeout = TimeSpan.FromSeconds(2);
+    var mongoClient = new MongoClient(clientSettings);
 
-builder.Services.AddSingleton<MongoDbContext>();
+    try
+    {
+        await mongoClient.GetDatabase(mongoSettings.DatabaseName)
+            .RunCommandAsync<MongoDB.Bson.BsonDocument>(new MongoDB.Bson.BsonDocument("ping", 1));
+        builder.Services.AddSingleton(mongoClient);
+        builder.Services.AddSingleton<IMongoDatabase>(mongoClient.GetDatabase(mongoSettings.DatabaseName));
+        builder.Services.AddSingleton<MongoDbContext>();
+        builder.Services.AddSingleton<ICommerceStore, MongoCommerceStore>();
+    }
+    catch (Exception ex) when (storageMode == "Auto" && (ex is MongoException or TimeoutException))
+    {
+        Console.WriteLine($"MongoDB indisponível ({ex.Message}); iniciando com armazenamento em memória (dados não persistem após encerrar a API).");
+        builder.Services.AddSingleton<ICommerceStore, InMemoryCommerceStore>();
+    }
+}
+
 builder.Services.AddScoped<IProdutoService, ProdutoService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -106,11 +130,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-var database = app.Services.GetRequiredService<IMongoDatabase>();
-var usuarios = database.GetCollection<Usuario>("usuarios");
-var produtos = database.GetCollection<Produto>("produtos");
+var store = app.Services.GetRequiredService<ICommerceStore>();
 var adminEmail = "admin@girassol.com";
-var adminExists = await usuarios.Find(u => u.Email == adminEmail).AnyAsync();
+var adminExists = await store.BuscarUsuarioPorEmailAsync(adminEmail) is not null;
 if (!adminExists)
 {
     var admin = new Usuario
@@ -122,11 +144,11 @@ if (!adminExists)
         CriadoEm = DateTime.UtcNow
     };
 
-    await usuarios.InsertOneAsync(admin);
+    await store.InserirUsuarioAsync(admin);
 }
 
-var produtosExistentes = await produtos.CountDocumentsAsync(Builders<Produto>.Filter.Empty);
-if (produtosExistentes == 0)
+var produtosExistentes = await store.ListarProdutosAsync();
+if (produtosExistentes.Count == 0)
 {
     var produtosSeed = new[]
     {
@@ -174,7 +196,10 @@ if (produtosExistentes == 0)
         }
     };
 
-    await produtos.InsertManyAsync(produtosSeed);
+    foreach (var produto in produtosSeed)
+    {
+        await store.InserirProdutoAsync(produto);
+    }
 }
 
 app.MapFallbackToFile("index.html");

@@ -6,26 +6,18 @@
 cd "C:\Users\Bruno\OneDrive\Área de Trabalho\web\Trabalho\girassolECommerce"
 ```
 
-## 2. Iniciar o Docker e subir o MongoDB
+## 2. Iniciar a API (Docker opcional)
 
-Abra o Docker Desktop e espere ele ficar pronto. No PowerShell, na pasta do projeto, execute:
+Para usar MongoDB com persistência, abra o Docker Desktop e execute:
 
 ```powershell
 docker compose up -d
 docker compose ps
 ```
 
-O serviço `mongo` deve aparecer como ativo. Se o comando `docker compose` não for reconhecido, confirme que o Docker Desktop está instalado e em execução.
+Se não quiser usar Docker, pule este passo. A API inicia automaticamente com armazenamento mock em memória quando não consegue acessar o MongoDB.
 
-## 3. Configurar variáveis de ambiente
-
-```powershell
-$env:MONGODB_URI = "mongodb://localhost:27017"
-$env:JWT_SECRET_KEY = "8a9f2e9d6b7c4d3a2f1e0c9b8a7d6e5f4g3h2j1k0l9m8n7p6q5r4s3t2u1v0w9x8y7z6"
-$env:ASPNETCORE_ENVIRONMENT = "Development"
-```
-
-## 4. Restaurar, compilar e iniciar a API
+## 3. Restaurar, compilar e iniciar a API
 
 ```powershell
 dotnet restore
@@ -33,16 +25,18 @@ dotnet build
 dotnet run --project .\src\GirassolCommerce.Api\GirassolCommerce.Api.csproj
 ```
 
+Esses são os únicos comandos necessários para executar a API. Por padrão ela usa o MongoDB se estiver disponível; caso contrário, usa dados de demonstração em memória. Os dados em memória são perdidos ao encerrar a API. Para testar esse modo mesmo com MongoDB disponível, execute antes `$env:Storage__Mode = "InMemory"`.
+
 Deixe essa janela do PowerShell aberta enquanto estiver usando a aplicação. A API informa no terminal o endereço em que está ouvindo.
 
-## 5. Abrir a aplicação no navegador
+## 4. Abrir a aplicação no navegador
 
 - Aplicação: http://localhost:5197
 - Swagger: http://localhost:5197/swagger
 
 Se a porta exibida no terminal for diferente, use-a no lugar de `5197` nos endereços dos passos seguintes.
 
-## 6. Login do admin
+## 5. Login do admin
 
 ```powershell
 $body = @{ email='admin@girassol.com'; senha='Admin@123' } | ConvertTo-Json
@@ -50,13 +44,13 @@ $resp = Invoke-RestMethod -Method Post -Uri http://localhost:5197/api/auth/login
 $resp
 ```
 
-## 7. Listar produtos
+## 6. Listar produtos
 
 ```powershell
 Invoke-RestMethod -Uri http://localhost:5197/api/produtos
 ```
 
-## 8. Criar produto (admin)
+## 7. Criar produto (admin)
 
 ```powershell
 $token = $resp.token
@@ -74,7 +68,7 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri http://localhost:5197/api/produtos -ContentType 'application/json' -Headers @{ Authorization = "Bearer $token" } -Body $body
 ```
 
-## 9. Criar pedido
+## 8. Criar pedido
 
 ```powershell
 $body = @{
@@ -89,7 +83,7 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri http://localhost:5197/api/pedidos -ContentType 'application/json' -Headers @{ Authorization = "Bearer $token" } -Body $body
 ```
 
-## 10. Usuário padrão
+## 9. Usuário padrão
 
 - Email: `admin@girassol.com`
 - Senha: `Admin@123`

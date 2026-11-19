@@ -1,7 +1,6 @@
 using GirassolCommerce.Api.Data;
 using GirassolCommerce.Api.Dtos;
 using GirassolCommerce.Api.Models;
-using MongoDB.Driver;
 
 namespace GirassolCommerce.Api.Services;
 
@@ -17,18 +16,18 @@ public interface IProdutoService
 
 public class ProdutoService : IProdutoService
 {
-    private readonly MongoDbContext _context;
+    private readonly ICommerceStore _store;
 
-    public ProdutoService(MongoDbContext context)
+    public ProdutoService(ICommerceStore store)
     {
-        _context = context;
+        _store = store;
     }
 
     public async Task<List<Produto>> ListarAsync()
     {
-        return await _context.Produtos.Find(_ => true)
-            .SortBy(p => p.Nome)
-            .ToListAsync();
+        return (await _store.ListarProdutosAsync())
+            .OrderBy(p => p.Nome)
+            .ToList();
     }
 
     public async Task<Produto?> BuscarPorIdAsync(string id)
@@ -38,7 +37,7 @@ public class ProdutoService : IProdutoService
             return null;
         }
 
-        return await _context.Produtos.Find(p => p.Id == id).FirstOrDefaultAsync();
+        return await _store.BuscarProdutoAsync(id);
     }
 
     public async Task<Produto> CriarAsync(CreateProdutoRequest request)
@@ -59,7 +58,7 @@ public class ProdutoService : IProdutoService
         };
 
         PedidoBusinessService.ValidarProduto(produto);
-        await _context.Produtos.InsertOneAsync(produto);
+        await _store.InserirProdutoAsync(produto);
         return produto;
     }
 
@@ -80,15 +79,14 @@ public class ProdutoService : IProdutoService
         produto.AtualizadoEm = DateTime.UtcNow;
 
         PedidoBusinessService.ValidarProduto(produto);
-        await _context.Produtos.ReplaceOneAsync(p => p.Id == id, produto);
+        await _store.AtualizarProdutoAsync(produto);
 
         return produto;
     }
 
     public async Task DeletarAsync(string id)
     {
-        var result = await _context.Produtos.DeleteOneAsync(p => p.Id == id);
-        if (result.DeletedCount == 0)
+        if (!await _store.DeletarProdutoAsync(id))
         {
             throw new KeyNotFoundException("Produto não encontrado.");
         }
@@ -106,7 +104,7 @@ public class ProdutoService : IProdutoService
 
         produto.Estoque -= quantidade;
         produto.AtualizadoEm = DateTime.UtcNow;
-        await _context.Produtos.ReplaceOneAsync(p => p.Id == produtoId, produto);
+        await _store.AtualizarProdutoAsync(produto);
     }
 
     private static string GerarSlug(string value)
